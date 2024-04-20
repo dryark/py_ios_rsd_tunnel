@@ -1,0 +1,9 @@
+construct==2.10.70
+cryptography==42.0.5
+hyperframe==6.0.1
+opack==0.1.0
+packaging==24.0
+qh3==0.15.1
+srptools==1.0.1
+cf_external_utun
+cf_mdns
