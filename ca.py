@@ -1,50 +1,89 @@
-# Copyright (c) 2024 Dry Ark LLC
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.serialization import (
-    Encoding,
-    NoEncryption,
-    PrivateFormat,
-    load_pem_public_key,
+from datetime import (
+    datetime,
+    timedelta,
 )
-from cryptography.x509.oid import NameOID
-from datetime import datetime, timedelta
-from typing import Optional
 
+from asn1crypto import (
+    x509,
+)
+#from oscrypto import (
+#    generate_pair,
+#)
+from oscrypto.asymmetric import (
+    PublicKey,
+    PrivateKey,
+    load_certificate,
+    generate_pair,
+    dump_private_key,
+    load_public_key,
+)
+from oscrypto.keys import (
+    parse_public,
+)
+from certbuilder import (
+    CertificateBuilder,
+    pem_armor_certificate,
+)
+from typing import (
+    Optional,
+)
+
+import zoneinfo
 def make_cert(
-    key,
+    private_key,
     public_key,
     common_name=None
-):
-    attributes = [x509.NameAttribute(NameOID.COMMON_NAME, common_name)] if common_name else []
-    subject = issuer = x509.Name(attributes)
-    cert = x509.CertificateBuilder()
-    cert = cert.subject_name(subject)
-    cert = cert.issuer_name(issuer)
-    cert = cert.public_key(public_key)
-    cert = cert.serial_number(1)
-    now = datetime.now()
-    now = now.replace(tzinfo=None)
-    cert = cert.not_valid_before(now - timedelta(minutes=1))
-    cert = cert.not_valid_after(now + timedelta(days=365 * 10))
-    cert = cert.sign(key, hashes.SHA256())
+) -> x509.Certificate:
+    source = {
+        #'country_name': 'US',
+        #'state_or_province_name': 'DE',
+        #'locality_name': '?',
+        #'organization_name': 'ControlFloor',
+        'common_name': 'Device',
+    }
+    
+    now = datetime.now( zoneinfo.ZoneInfo('UTC') )
+    begin = (now - timedelta(minutes=1))
+    end = (now + timedelta(days=365 * 10))
+    
+    builder = CertificateBuilder(
+        source,
+        public_key,
+    )
+    builder.serial_number = 1
+    builder.begin_date = begin
+    builder.end_date = end
+    #builder.issuer = source
+    builder.hash_algo = 'sha256'
+    
+    builder.self_signed = True
+    cert = builder.build( private_key )
     return cert
 
-
-def dump_cert(cert):
-    return cert.public_bytes(Encoding.PEM)
-
-
 def ca_do_everything(
-    device_public_key,
-    private_key: Optional[rsa.RSAPrivateKey] = None
+    device_public_key_pem: str,
+    private_key: Optional[PrivateKey] = None
 ):
     if private_key is None:
-        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-
-    cert = make_cert(private_key, private_key.public_key())
-    dev_key = load_pem_public_key(device_public_key)
-    dev_cert = make_cert(private_key, dev_key, 'Device')
-    return dump_cert(cert), private_key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()), dump_cert(
-        dev_cert)
+        public_key, private_key = generate_pair('rsa', bit_size=2048)
+    else:
+        public_key = private_key.public_key()
+    
+    cert = make_cert(
+        private_key,
+        public_key,
+    )
+    
+    device_public_key = load_public_key( device_public_key_pem )
+    device_cert = make_cert(
+        private_key,
+        device_public_key,
+        'Device',
+    )
+    #private_key_der = private_key.dump()
+    #private_key_pem = pem.armor('CERTIFICATE', private_key_der)
+    return [
+        pem_armor_certificate( cert ),
+        dump_private_key( private_key, None ),#, 'pkcs8' ),
+        pem_armor_certificate( device_cert ),
+    ]

@@ -7,4 +7,4 @@ def get_remoted_interfaces( ios17only: bool ):
         'interface': 'en3',
         'ipv6': '[ipv6 address of interface]',
         'hasRemotePairing': True,
-    })
+    }]

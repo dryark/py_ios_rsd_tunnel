@@ -1,9 +1,11 @@
+asn1crypto==1.5.1
+certbuilder==0.14.2
 construct==2.10.70
 cryptography==42.0.5
 hyperframe==6.0.1
-opack==0.1.0
-packaging==24.0
+oscrypto==1.3.0
+pyasn1==0.6.0
+pyasn1_modules==0.4.0
 qh3==0.15.1
+rsa==4.9
 srptools==1.0.1
-cf_external_utun
-cf_mdns

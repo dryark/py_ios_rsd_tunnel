@@ -4,6 +4,10 @@ import plistlib
 import socket
 import time
 
+from .exceptions import (
+    NotPairedError,
+)
+
 from construct import (
     Const,
     CString,

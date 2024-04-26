@@ -46,6 +46,7 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
     ) -> None:
         super().__init__()
         self.name = name
+        self.udid = ""
         self.service = RemoteXPCConnection(address)
         self.peer_info: Optional[Mapping] = None
         self.lockdown: Optional[LockdownClient] = None
@@ -65,6 +66,8 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
         
         if self.peer_info is None:
             logging.info(f'peer_info is none connecting to RSD service {self.name}')
+        
+        #logging.info(f'peer_info {peer_info}')
         
         self.udid = self.peer_info['Properties']['UniqueDeviceID']
         self.product_type = self.peer_info['Properties']['ProductType']

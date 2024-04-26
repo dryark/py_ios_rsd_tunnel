@@ -9,10 +9,12 @@ def lockdown_tunnel(
 ) -> None:
     service_provider = create_using_usbmux(serial=udid)
     service = CoreDeviceTunnelProxy(service_provider)
-    asyncio.run(
-        tunnel_task(
-            service,
-            secrets=None,
-            protocol='tcp'
-        ), debug=True
+    
+    #asyncio.run(
+    tunnel_task(
+        service,
+        secrets=None,
+        protocol='tcp'
     )
+    #)
+    

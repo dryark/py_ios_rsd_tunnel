@@ -10,6 +10,23 @@ from .cli.lockdown import (
     lockdown_tunnel,
 )
 from .exceptions import __all__
+from .exceptions import (
+    NotPairedError,
+    PasswordRequiredError,
+    PairingDialogResponsePendingError,
+    ConnectionTerminatedError,
+    NoDeviceConnectedError,
+    UserDeniedPairingError,
+    InvalidHostIDError,
+    GetProhibitedError,
+    SetProhibitedError,
+    MissingValueError,
+    ConnectionFailedToUsbmuxdError,
+    InternalError,
+    InvalidServiceError,
+    AccessDeniedError,
+    DeviceNotFoundError,
+)
 
 logging.getLogger('quic').disabled = True
 logging.getLogger('asyncio').disabled = True

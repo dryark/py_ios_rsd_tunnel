@@ -6,8 +6,10 @@ import dataclasses
 import hashlib
 import json
 import logging
+import os
 import platform
 import plistlib
+import rsa
 import struct
 import sys
 import subprocess
@@ -40,16 +42,15 @@ from cryptography.hazmat.primitives._serialization import (
     Encoding,
     PublicFormat,
 )
-from cryptography.hazmat.primitives.asymmetric import rsa
+#from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+#from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey,
     X25519PublicKey,
 )
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from opack import dumps
 from pathlib import Path
 from qh3.asyncio import QuicConnectionProtocol
 from qh3.asyncio.client import connect as aioquic_connect
@@ -85,6 +86,7 @@ from typing import (
     cast,
 )
 
+from .tinyopack import TinyOPack
 from ..ca import make_cert
 from ..exceptions import (
     PairingError,
@@ -226,6 +228,7 @@ class RemotePairingTunnel(ABC):
             await self.send_packet_to_device(data)
         
         self.tun = ExternalUtun()
+        print(f'Starting external utun using label {label}')
         await self.tun.up(
             ipv6 = address,
             label = label,
@@ -255,7 +258,7 @@ class RemotePairingQuicTunnel(RemotePairingTunnel, QuicConnectionProtocol):
         QuicConnectionProtocol.__init__(self, quic, stream_handler)
         self._keep_alive_task = None
 
-    async def wait_closed_task(self):
+    def wait_closed_task(self):
         return QuicConnectionProtocol.wait_closed(self)
 
     async def wait_closed(self) -> None:
@@ -288,9 +291,10 @@ class RemotePairingQuicTunnel(RemotePairingTunnel, QuicConnectionProtocol):
     async def start_tunnel(
         self,
         address: str,
-        mtu: int
+        mtu: int,
+        label: str = "label",
     ) -> None:
-        await super().start_tunnel(address, mtu)
+        await super().start_tunnel(address, mtu, label = label)
         self._keep_alive_task = asyncio.create_task(self.keep_alive_task())
 
     async def stop_tunnel(self) -> None:
@@ -344,7 +348,7 @@ class RemotePairingTcpTunnel(RemotePairingTunnel):
             self._logger.warning(f'got {e.__class__.__name__} in {asyncio.current_task().get_name()}')
             await self.wait_closed()
 
-    async def wait_closed_task(self):
+    def wait_closed_task(self):
         return self._writer.wait_closed()
 
     async def wait_closed(self) -> None:
@@ -370,9 +374,10 @@ class RemotePairingTcpTunnel(RemotePairingTunnel):
     async def start_tunnel(
         self,
         address: str,
-        mtu: int
+        mtu: int,
+        label: str = "label",
     ) -> None:
-        await super().start_tunnel(address, mtu)
+        await super().start_tunnel(address, mtu, label=label)
         
         self._sock_read_task = asyncio.create_task(
             self.sock_read_task(),
@@ -467,17 +472,20 @@ class RemotePairingProtocol(StartTcpTunnel):
 
     def create_quic_listener(
         self,
-        private_key: RSAPrivateKey
+        private_key: rsa.PrivateKey,
     ) -> Mapping:
+        public_key = rsa.PublicKey( private_key.n, private_key.e )
+        spki = public_key_to_spki( public_key )
         request = {
             'request': {
                 '_0': {
                     'createListener': {
                         'key': base64.b64encode(
-                            private_key.public_key().public_bytes(
-                                Encoding.DER,
-                                PublicFormat.SubjectPublicKeyInfo
-                            )
+                            spki,
+                            #private_key.public_key().public_bytes(
+                            #    Encoding.DER,
+                            #    PublicFormat.SubjectPublicKeyInfo
+                            #)
                         ).decode(),
                         'transportProtocolType': 'quic'
                     }
@@ -506,22 +514,30 @@ class RemotePairingProtocol(StartTcpTunnel):
     async def start_quic_tunnel(
         self,
         secrets_log_file: Optional[TextIO] = None,
-        max_idle_timeout: float = RemotePairingQuicTunnel.MAX_IDLE_TIMEOUT
+        max_idle_timeout: float = RemotePairingQuicTunnel.MAX_IDLE_TIMEOUT,
+        label: str = "label",
     ) -> AsyncGenerator[TunnelResult, None]:
-        private_key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048
-        )
-        parameters = self.create_quic_listener(private_key)
+        #( private_key = rsa.generate_private_key(
+        #    public_exponent=65537,
+        #    key_size=2048
+        #)
+        ( private_key, public_key ) = rsa.newkeys( 2048 )#, e=65537 )
+        
+        parameters = self.create_quic_listener( private_key )
+        #cert = make_cert(
+        #    private_key,
+        #    private_key.public_key()
+        #)
         cert = make_cert(
-            private_key,
-            private_key.public_key()
+             private_key = private_key,
+             public_key = public_key,
         )
+        cert_der = cert.dump()
         
         configuration = QuicConfiguration(
             alpn_protocols=['RemotePairingTunnelProtocol'],
             is_client=True,
-            certificate=cert,
+            certificate=cert_der,
             private_key=private_key,
             verify_mode=VerifyMode.CERT_NONE,
             verify_hostname=False,
@@ -547,7 +563,8 @@ class RemotePairingProtocol(StartTcpTunnel):
             
             await client.start_tunnel(
                 handshake_response['clientParameters']['address'],
-                handshake_response['clientParameters']['mtu']
+                handshake_response['clientParameters']['mtu'],
+                label = label,
             )
             
             try:
@@ -584,7 +601,7 @@ class RemotePairingProtocol(StartTcpTunnel):
 
         tunnel.start_tunnel(
             handshake_response['clientParameters']['address'],
-            handshake_response['clientParameters']['mtu']
+            handshake_response['clientParameters']['mtu'],
         )
 
         try:
@@ -743,7 +760,7 @@ class RemotePairingProtocol(StartTcpTunnel):
 
         self.signature = self.ed25519_private_key.sign(signbuf)
 
-        device_info = dumps({
+        device_info = TinyOPack.build({
             'altIRK': b'\xe9\xe8-\xc0jIykVoT\x00\x19\xb1\xc7{',
             'btAddr': '11:22:33:44:55:66',
             'mac': b'\x11\x22\x33\x44\x55\x66',
@@ -1051,6 +1068,7 @@ class CoreDeviceTunnelService(RemotePairingProtocol, RemoteService):
             self.SERVICE_NAME
         )
         RemotePairingProtocol.__init__(self)
+        self.udid = self.rsd.udid
         self.version: Optional[int] = None
 
     def connect(
@@ -1178,7 +1196,8 @@ class CoreDeviceTunnelProxy(StartTcpTunnel, LockdownService):
         
         await tunnel.start_tunnel(
             handshake_response['clientParameters']['address'],
-            handshake_response['clientParameters']['mtu']
+            handshake_response['clientParameters']['mtu'],
+            label = self._lockdown.udid,
         )
         
         try:
@@ -1200,14 +1219,16 @@ class CoreDeviceTunnelProxy(StartTcpTunnel, LockdownService):
 async def start_tunnel_over_core_device(
     service_provider: CoreDeviceTunnelService, secrets: Optional[TextIO] = None,
     max_idle_timeout: float = RemotePairingQuicTunnel.MAX_IDLE_TIMEOUT,
-    protocol: str = 'quic'
+    protocol: str = 'quic',
+    label: str = "label",
 ) -> AsyncGenerator[TunnelResult, None]:
     stop_remoted()
     with service_provider:
         if protocol == 'quic':
             async with service_provider.start_quic_tunnel(
                 secrets_log_file=secrets,
-                max_idle_timeout=max_idle_timeout
+                max_idle_timeout=max_idle_timeout,
+                label=label,
             ) as tunnel_result:
                 resume_remoted()
                 yield tunnel_result
@@ -1222,13 +1243,15 @@ async def start_tunnel_over_remotepairing(
     remote_pairing: RemotePairingTunnelService,
     secrets: Optional[TextIO] = None, 
     max_idle_timeout: float = RemotePairingQuicTunnel.MAX_IDLE_TIMEOUT, 
-    protocol: str = 'quic'
+    protocol: str = 'quic',
+    label: str = "label",
 )  -> AsyncGenerator[TunnelResult, None]:
     with remote_pairing: 
         if protocol == 'quic': 
             async with remote_pairing.start_quic_tunnel(
                 secrets_log_file=secrets,
-                max_idle_timeout=max_idle_timeout
+                max_idle_timeout=max_idle_timeout,
+                label=label,
             ) as tunnel_result:
                 yield tunnel_result
         elif protocol == 'tcp': 
@@ -1249,7 +1272,8 @@ async def start_tunnel(
             protocol_handler,
             secrets=secrets,
             max_idle_timeout=max_idle_timeout,
-            protocol=protocol
+            protocol=protocol,
+            label=protocol_handler.udid,
         ) as service:
             yield service
     elif isinstance(protocol_handler, RemotePairingTunnelService):
@@ -1258,7 +1282,8 @@ async def start_tunnel(
             protocol_handler,
             secrets=secrets,
             max_idle_timeout=max_idle_timeout,
-            protocol=protocol
+            protocol=protocol,
+            label=protocol_handler.udid,
         ) as service:
             yield service
     elif isinstance(protocol_handler, CoreDeviceTunnelProxy):
@@ -1272,13 +1297,28 @@ async def start_tunnel(
     else:
         raise Exception(f'Bad value for protocol_handler: {protocol_handler}')
 
+REMOTEDTOOL_PATH: str = None
+
+def get_remoted_path() -> str:
+    if REMOTEDTOOL_PATH is not None:
+        return REMOTEDTOOL_PATH
+    if 'CFTOOLS' in os.environ:
+        REMOTEDTOOL_PATH = os.environ['CFTOOLS'] + "/remotedtool"
+    else:
+        if 'CFRDTOOL' in os.environ:
+            REMOTEDTOOL_PATH = os.environ['CFRDTOOL']
+        else:
+            REMOTEDTOOL_PATH = "remotedtool"
+    return REMOTEDTOOL_PATH
 
 def stop_remoted() -> None:
-    subprocess.call( [ "/path/to/remoted_tool", "suspend" ] )
+    bin = get_remoted_path()
+    subprocess.call( [ bin, "suspend" ] )
 
 
 def resume_remoted() -> None:
-    subprocess.call( [ "/path/to/remoted_tool", "resume" ] )
+    bin = get_remoted_path()
+    subprocess.call( [ bin, "resume" ] )
 
 
 RSD_PORT = 58783
@@ -1305,14 +1345,14 @@ async def list_remotes() -> None:
 
 async def get_core_device_tunnel_service_from_ipv6(
     ipv6: str,
-) -> CoreDeviceTunnelService:
+) -> [ CoreDeviceTunnelService, str ]:
     stop_remoted()
     rsd = RemoteServiceDiscoveryService(( ipv6, RSD_PORT ))
     rsd.connect()
     resume_remoted()
-    service = CoreDeviceTunnelService(rsd)
+    service = CoreDeviceTunnelService( rsd )
     service.connect(autopair=True)
-    return service
+    return service, rsd.udid
 
 
 async def remote_pair(

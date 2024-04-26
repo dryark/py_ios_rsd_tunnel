@@ -46,4 +46,11 @@ class MissingValueError(LockdownError):
     """ raised when attempting to query non-existent domain/key """
     pass
 
-__all__ = [name for name, obj in locals().items() if isinstance(obj, type)]
+__all__ = [
+    name for name, cls in locals().items() if isinstance(cls, type) and (
+        issubclass(cls, Exception) or
+        issubclass(cls, MuxException) or
+        issubclass(cls, LockdownError) or
+        issubclass(cls, PairingError)
+    )
+]
