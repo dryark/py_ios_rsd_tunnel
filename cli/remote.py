@@ -108,12 +108,12 @@ def tunnel_task(
     logger.info('tunnel was closed')
 
 
-async def start_tunnel_task_from_ipv6(
+def start_tunnel_task_from_ipv6(
     ipv6: str,
 ) -> None:
-    tunnel_service, udid = await get_core_device_tunnel_service_from_ipv6( ipv6 = ipv6 )
+    tunnel_service, udid = get_core_device_tunnel_service_from_ipv6( ipv6 = ipv6 )
     print(f'device udid:{udid}')
-    await tunnel_task(
+    tunnel_task(
         tunnel_service,
         protocol='quic'
     )
@@ -121,12 +121,12 @@ async def start_tunnel_task_from_ipv6(
 def remote_tunnel(
     ipv6: str,
 ) -> None:
-    asyncio.run(
+    #asyncio.run(
         start_tunnel_task_from_ipv6(
             ipv6=ipv6,
-        ),
-        debug=True,
-    )
+        )#,
+        #debug=True,
+    #)
 
 def cli_pair(
     ipv6: str,

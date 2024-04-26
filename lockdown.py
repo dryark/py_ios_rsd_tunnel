@@ -13,25 +13,15 @@ from contextlib import (
     contextmanager,
     suppress,
 )
-#from cryptography.hazmat.primitives import hashes
-#from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-#from cryptography.hazmat.primitives.serialization import Encoding
-#from cryptography.hazmat.primitives.serialization.pkcs7 import PKCS7SignatureBuilder
-#from cryptography.hazmat.primitives.serialization.pkcs12 import load_pkcs12
-
 from enum import Enum
 from functools import wraps
-#from packaging.version import Version
-from pathlib import Path
-
 from oscrypto.keys import (
     parse_pkcs12,
 )
 from oscrypto.asymmetric import (
-    PublicKey,
     PrivateKey,
-    #load_certificate,
 )
+from pathlib import Path
 
 from .ca import ca_do_everything
 from . import usbmux

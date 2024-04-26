@@ -4,12 +4,12 @@ import base64
 import binascii
 import dataclasses
 import hashlib
+import hmac
 import json
 import logging
 import os
 import platform
 import plistlib
-import rsa
 import struct
 import sys
 import subprocess
@@ -37,20 +37,31 @@ from contextlib import (
     asynccontextmanager,
     suppress,
 )
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives._serialization import (
-    Encoding,
-    PublicFormat,
+
+from nacl import bindings
+from nacl.signing import (
+    SigningKey as NaclSigningKey,
+    VerifyKey,
 )
-#from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-#from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
-from cryptography.hazmat.primitives.asymmetric.x25519 import (
-    X25519PrivateKey,
-    X25519PublicKey,
+from nacl.public import (
+    PrivateKey as NaclPrivateKey,
 )
-from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from oscrypto.asymmetric import (
+    PrivateKey as OscPrivateKey,
+    PublicKey as OscPublicKey,
+)
+
+from qh3._hazmat import AeadChaCha20Poly1305 as ChaCha20Poly1305
+#from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
+from certbuilder import (
+    pem_armor_certificate,
+)
+from oscrypto.asymmetric import (
+    dump_private_key,
+    generate_pair,
+)
+
 from pathlib import Path
 from qh3.asyncio import QuicConnectionProtocol
 from qh3.asyncio.client import connect as aioquic_connect
@@ -196,7 +207,21 @@ RPPairingPacket = Struct(
     'body' / Prefixed(Int16ub, GreedyBytes),
 )
 
+def hkdf_expand(prk, info=b"", length=64):
+    blocks = (length + 511) // 512
+    #okm = b""
+    output = b""
+    for i in range(1, blocks + 1):
+        output += hmac.new(prk, output + info + bytes([i]), hashlib.sha512).digest()
+    return output[:length]
 
+def hkdf_extract(salt, ikm):
+    return hmac.new(salt, ikm, hashlib.sha512).digest()
+    
+def hkdf(salt, key, info, length):
+    prk = hkdf_extract(salt, key)
+    return hkdf_expand(prk, info, length)
+    
 class RemotePairingTunnel(ABC):
     def __init__(self):
         self._queue = asyncio.Queue()
@@ -228,7 +253,6 @@ class RemotePairingTunnel(ABC):
             await self.send_packet_to_device(data)
         
         self.tun = ExternalUtun()
-        print(f'Starting external utun using label {label}')
         await self.tun.up(
             ipv6 = address,
             label = label,
@@ -421,7 +445,6 @@ class StartTcpTunnel(ABC):
     async def start_tcp_tunnel(self) -> AsyncGenerator[TunnelResult, None]:
         pass
 
-
 class RemotePairingProtocol(StartTcpTunnel):
     WIRE_PROTOCOL_VERSION = 19
 
@@ -431,11 +454,11 @@ class RemotePairingProtocol(StartTcpTunnel):
         self._encrypted_sequence_number = 0
         self.version = None
         self.handshake_info = None
-        self.x25519_private_key = X25519PrivateKey.generate()
-        self.ed25519_private_key = Ed25519PrivateKey.generate()
+        self.x25519_private_key = NaclPrivateKey.generate()
+        self.ed25519_private_key = NaclSigningKey.generate()
         self.identifier = generate_host_id()
         self.srp_context = None
-        self.encryption_key = None
+        self.session_key: bytes = None
         self.signature = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -470,22 +493,19 @@ class RemotePairingProtocol(StartTcpTunnel):
         
         self._init_client_server_main_encryption_keys()
 
+    from oscrypto.asymmetric import generate_pair
     def create_quic_listener(
         self,
-        private_key: rsa.PrivateKey,
+        public_key: OscPublicKey,
+        private_key: OscPrivateKey,
     ) -> Mapping:
-        public_key = rsa.PublicKey( private_key.n, private_key.e )
-        spki = public_key_to_spki( public_key )
+        spki = public_key.asn1.dump()
         request = {
             'request': {
                 '_0': {
                     'createListener': {
                         'key': base64.b64encode(
                             spki,
-                            #private_key.public_key().public_bytes(
-                            #    Encoding.DER,
-                            #    PublicFormat.SubjectPublicKeyInfo
-                            #)
                         ).decode(),
                         'transportProtocolType': 'quic'
                     }
@@ -501,7 +521,7 @@ class RemotePairingProtocol(StartTcpTunnel):
             'request': {
                 '_0': {
                     'createListener': {
-                        'key': base64.b64encode(self.encryption_key).decode(),
+                        'key': base64.b64encode(self.session_key).decode(),
                         'transportProtocolType': 'tcp'
                     }
                 }
@@ -517,33 +537,35 @@ class RemotePairingProtocol(StartTcpTunnel):
         max_idle_timeout: float = RemotePairingQuicTunnel.MAX_IDLE_TIMEOUT,
         label: str = "label",
     ) -> AsyncGenerator[TunnelResult, None]:
-        #( private_key = rsa.generate_private_key(
-        #    public_exponent=65537,
-        #    key_size=2048
-        #)
-        ( private_key, public_key ) = rsa.newkeys( 2048 )#, e=65537 )
+        public_key, private_key = generate_pair('rsa', bit_size=2048)
+        # OscPublicKey and OscPrivateKey
         
-        parameters = self.create_quic_listener( private_key )
-        #cert = make_cert(
-        #    private_key,
-        #    private_key.public_key()
-        #)
+        parameters = self.create_quic_listener( public_key, private_key )
         cert = make_cert(
              private_key = private_key,
              public_key = public_key,
         )
-        cert_der = cert.dump()
+        #cert_der = cert.dump()
+        
+        #private_der = dump_private_key( private_key, None )
         
         configuration = QuicConfiguration(
             alpn_protocols=['RemotePairingTunnelProtocol'],
             is_client=True,
-            certificate=cert_der,
-            private_key=private_key,
             verify_mode=VerifyMode.CERT_NONE,
             verify_hostname=False,
             max_datagram_frame_size=RemotePairingQuicTunnel.MAX_QUIC_DATAGRAM,
             idle_timeout=max_idle_timeout
         )
+        
+        cert_pem = pem_armor_certificate( cert )
+        private_key_pem = dump_private_key( private_key, None )
+        
+        configuration.load_cert_chain(
+            certfile = cert_pem,
+            keyfile = private_key_pem,
+        )
+                
         configuration.secrets_log_file = secrets_log_file
 
         host = self.hostname
@@ -588,7 +610,7 @@ class RemotePairingProtocol(StartTcpTunnel):
         sock = create_connection((host, port))
         set_keepalive(sock)
         ctx = None # SSLPSKContext(ssl.PROTOCOL_TLSv1_2) # None seems to be ok...
-        ctx.psk = self.encryption_key
+        ctx.psk = self.session_key
         ctx.set_ciphers('PSK')
         
         reader, writer = await asyncio.open_connection(
@@ -618,8 +640,8 @@ class RemotePairingProtocol(StartTcpTunnel):
     def save_pair_record(self) -> None:
         self.pair_record_path.write_bytes(
             plistlib.dumps({
-                'public_key': self.ed25519_private_key.public_key().public_bytes_raw(),
-                'private_key': self.ed25519_private_key.private_bytes_raw(),
+                'public_key': self.ed25519_private_key.verify_key.encode(),
+                'private_key': self.ed25519_private_key.encode(),
                 'remote_unlock_host_key': self.remote_unlock_host_key
             })
         )
@@ -670,10 +692,11 @@ class RemotePairingProtocol(StartTcpTunnel):
         
         self.logger.info('Waiting user pairing consent')
         response = self._receive_plain_response()['event']['_0']
-
+        
         if 'pairingRejectedWithError' in response:
             raise PairingError(
-                response['pairingRejectedWithError']['wrappedError']['userInfo']['NSLocalizedDescription'])
+                response['pairingRejectedWithError']['wrappedError']['userInfo']['NSLocalizedDescription']
+            )
         elif 'awaitingUserConsent' in response:
             pairingData = self._receive_pairing_data()
         else:
@@ -708,8 +731,8 @@ class RemotePairingProtocol(StartTcpTunnel):
             pairing_consent_result.salt.hex()
         )
         self.srp_context = client_session
-        self.encryption_key = binascii.unhexlify(self.srp_context.key)
-
+        self.session_key = binascii.unhexlify(self.srp_context.key)
+    
     def _verify_proof(self) -> None:
         client_public = binascii.unhexlify(self.srp_context.public)
         client_session_key_proof = binascii.unhexlify(self.srp_context.key_proof)
@@ -735,30 +758,29 @@ class RemotePairingProtocol(StartTcpTunnel):
         )
 
     def _save_pair_record_on_peer(self) -> Mapping:
-        # HKDF with above computed key (SRP_compute_key) + Pair-Setup-Encrypt-Salt + Pair-Setup-Encrypt-Info
-        # result used as key for chacha20-poly1305
-        setup_encryption_key = HKDF(
-            algorithm=hashes.SHA512(),
-            length=32,
-            salt=b'Pair-Setup-Encrypt-Salt',
-            info=b'Pair-Setup-Encrypt-Info',
-        ).derive(self.encryption_key)
-
-        self.ed25519_private_key = Ed25519PrivateKey.generate()
-
-        # HKDF with above computed key:
-        #   (SRP_compute_key) + Pair-Setup-Controller-Sign-Salt + Pair-Setup-Controller-Sign-Info
-        signbuf = HKDF(
-            algorithm=hashes.SHA512(),
+        setup_encryption_key = hkdf(
+            length = 32,
+            salt = b'Pair-Setup-Encrypt-Salt',
+            info = b'Pair-Setup-Encrypt-Info',
+            key = self.session_key,
+        )
+        
+        self.ed25519_private_key = NaclSigningKey.generate()
+        
+        signbuf = hkdf(
             length=32,
             salt=b'Pair-Setup-Controller-Sign-Salt',
             info=b'Pair-Setup-Controller-Sign-Info',
-        ).derive(self.encryption_key)
+            key = self.session_key,
+        )
 
         signbuf += self.identifier.encode()
-        signbuf += self.ed25519_private_key.public_key().public_bytes_raw()
+        public_raw_bytes = self.ed25519_private_key.verify_key.encode()
+        
+        signbuf += public_raw_bytes
+        
 
-        self.signature = self.ed25519_private_key.sign(signbuf)
+        self.signature = self.ed25519_private_key.sign(signbuf).signature
 
         device_info = TinyOPack.build({
             'altIRK': b'\xe9\xe8-\xc0jIykVoT\x00\x19\xb1\xc7{',
@@ -772,13 +794,13 @@ class RemotePairingProtocol(StartTcpTunnel):
 
         tlv = PairingDataComponentTLVBuf.build([
             {'type': PairingDataComponentType.IDENTIFIER, 'data': self.identifier.encode()},
-            {'type': PairingDataComponentType.PUBLIC_KEY, 'data': self.ed25519_private_key.public_key().public_bytes_raw()},
+            {'type': PairingDataComponentType.PUBLIC_KEY, 'data': public_raw_bytes},
             {'type': PairingDataComponentType.SIGNATURE,  'data': self.signature},
             {'type': PairingDataComponentType.INFO,       'data': device_info},
         ])
 
-        cip = ChaCha20Poly1305(setup_encryption_key)
-        encrypted_data = cip.encrypt(b'\x00\x00\x00\x00PS-Msg05', tlv, b'')
+        cipher = ChaCha20Poly1305(setup_encryption_key)
+        encrypted_data = cipher.encrypt(b'\x00\x00\x00\x00PS-Msg05', tlv, b'')
 
         tlv = PairingDataComponentTLVBuf.build([
             {'type': PairingDataComponentType.ENCRYPTED_DATA, 'data': encrypted_data[:255]},
@@ -795,7 +817,7 @@ class RemotePairingProtocol(StartTcpTunnel):
         data = self.decode_tlv(PairingDataComponentTLVBuf.parse(response))
 
         tlv = PairingDataComponentTLVBuf.parse(
-            cip.decrypt(
+            cipher.decrypt(
                 b'\x00\x00\x00\x00PS-Msg06',
                 data[PairingDataComponentType.ENCRYPTED_DATA],
                 b''
@@ -805,23 +827,23 @@ class RemotePairingProtocol(StartTcpTunnel):
         return tlv
 
     def _init_client_server_main_encryption_keys(self) -> None:
-        client_key = HKDF(
-            algorithm=hashes.SHA512(),
+        client_key = hkdf(
             length=32,
-            salt=None,
+            salt=b'',
             info=b'ClientEncrypt-main',
-        ).derive(self.encryption_key)
+            key = self.session_key,
+        )
         
-        self.client_cip = ChaCha20Poly1305(client_key)
+        self.client_cipher = ChaCha20Poly1305(client_key)
 
-        server_key = HKDF(
-            algorithm=hashes.SHA512(),
+        server_key = hkdf(
             length=32,
-            salt=None,
+            salt=b'',
             info=b'ServerEncrypt-main',
-        ).derive(self.encryption_key)
+            key = self.session_key,
+        )
         
-        self.server_cip = ChaCha20Poly1305(server_key)
+        self.server_cipher = ChaCha20Poly1305(server_key)
 
     def _create_remote_unlock(self) -> None:
         response = self._send_receive_encrypted_request({
@@ -848,6 +870,7 @@ class RemotePairingProtocol(StartTcpTunnel):
         return data
 
     def _validate_pairing(self) -> bool:
+        x25519_public_key = self.x25519_private_key.public_key
         pairing_data = PairingDataComponentTLVBuf.build([
             {
                 'type': PairingDataComponentType.STATE,
@@ -855,7 +878,7 @@ class RemotePairingProtocol(StartTcpTunnel):
             },
             {
                 'type': PairingDataComponentType.PUBLIC_KEY,
-                'data': self.x25519_private_key.public_key().public_bytes_raw()
+                'data': x25519_public_key.encode()
             },
         ])
         
@@ -868,39 +891,40 @@ class RemotePairingProtocol(StartTcpTunnel):
         data = self.decode_tlv(PairingDataComponentTLVBuf.parse(response))
 
         if PairingDataComponentType.ERROR in data:
+            print(f'Error verify 1 {data[PairingDataComponentType.ERROR]}')
             self._send_pair_verify_failed()
             return False
 
-        peer_public_key = X25519PublicKey.from_public_bytes(
-            data[ PairingDataComponentType.PUBLIC_KEY ]
-        )
-        self.encryption_key = self.x25519_private_key.exchange(peer_public_key)
-
-        derived_key = HKDF(
-            algorithm=hashes.SHA512(),
+        peer_public_key = VerifyKey( data[ PairingDataComponentType.PUBLIC_KEY ] )
+        self.session_key = bindings.crypto_scalarmult( self.x25519_private_key._private_key, peer_public_key._key)
+        
+        derived_key = hkdf(
             length=32,
             salt=b'Pair-Verify-Encrypt-Salt',
             info=b'Pair-Verify-Encrypt-Info',
-        ).derive(self.encryption_key)
-        cip = ChaCha20Poly1305(derived_key)
-
+            key = self.session_key,
+        )
+        cipher = ChaCha20Poly1305(derived_key)
+        
         # TODO:
         #   we should be able to verify from the received encrypted data, but from some reason we failed to
         #   do so. instead, we verify using the next stage
 
         if self.pair_record is None:
-            private_key = Ed25519PrivateKey.from_private_bytes(b'\x00' * 0x20)
+            private_key = NaclSigningKey(b'\x00' * 0x20)
         else:
-            private_key = Ed25519PrivateKey.from_private_bytes(self.pair_record['private_key'])
+            private_key = NaclSigningKey(self.pair_record['private_key'])
 
+        self.ed25519_private_key = private_key
+        
         signbuf = b''
-        signbuf += self.x25519_private_key.public_key().public_bytes_raw()
+        signbuf += self.x25519_private_key.public_key.encode()
         signbuf += self.identifier.encode()
-        signbuf += peer_public_key.public_bytes_raw()
+        signbuf += peer_public_key.encode()
 
-        signature = private_key.sign(signbuf)
+        signature = private_key.sign(signbuf).signature
 
-        encrypted_data = cip.encrypt(
+        encrypted_data = cipher.encrypt(
             b'\x00\x00\x00\x00PV-Msg03',
             PairingDataComponentTLVBuf.build([
                 {'type': PairingDataComponentType.IDENTIFIER, 'data': self.identifier.encode()},
@@ -922,6 +946,7 @@ class RemotePairingProtocol(StartTcpTunnel):
         data = self.decode_tlv(PairingDataComponentTLVBuf.parse(response))
 
         if PairingDataComponentType.ERROR in data:
+            print(f'Error verify 2 {data[PairingDataComponentType.ERROR]}')
             self._send_pair_verify_failed()
             return False
 
@@ -933,7 +958,7 @@ class RemotePairingProtocol(StartTcpTunnel):
     def _send_receive_encrypted_request(self, request: Mapping) -> Mapping:
         nonce = Int64ul.build(self._encrypted_sequence_number) + b'\x00' * 4
         
-        encrypted_data = self.client_cip.encrypt(
+        encrypted_data = self.client_cipher.encrypt(
             nonce,
             json.dumps(request).encode(),
             b''
@@ -954,10 +979,10 @@ class RemotePairingProtocol(StartTcpTunnel):
         encrypted_data = self._decode_bytes_if_needed(
             response['message']['streamEncrypted']['_0']
         )
-        plaintext = self.server_cip.decrypt(
+        plaintext = self.server_cipher.decrypt(
             nonce,
             encrypted_data,
-            None
+            b'',
         )
         return json.loads(plaintext)['response']['_1']
 
@@ -998,7 +1023,8 @@ class RemotePairingProtocol(StartTcpTunnel):
         })
 
     def _receive_pairing_data(self) -> bytes:
-        response = self._receive_plain_response()['event']['_0']
+        raw_response = self._receive_plain_response()
+        response = raw_response['event']['_0']
         if 'pairingData' in response:
             return self._decode_bytes_if_needed(response['pairingData']['_0']['data'])
         if 'pairingRejectedWithError' in response:
@@ -1297,19 +1323,20 @@ async def start_tunnel(
     else:
         raise Exception(f'Bad value for protocol_handler: {protocol_handler}')
 
-REMOTEDTOOL_PATH: str = None
+REMOTEDTOOL_PATH = ""
 
 def get_remoted_path() -> str:
-    if REMOTEDTOOL_PATH is not None:
-        return REMOTEDTOOL_PATH
+    if hasattr( get_remoted_path, "remoted_tool_path" ):
+        return get_remoted_path.remoted_tool_path
+    
     if 'CFTOOLS' in os.environ:
-        REMOTEDTOOL_PATH = os.environ['CFTOOLS'] + "/remotedtool"
+        get_remoted_path.remoted_tool_path = os.environ['CFTOOLS'] + "/remotedtool"
     else:
         if 'CFRDTOOL' in os.environ:
-            REMOTEDTOOL_PATH = os.environ['CFRDTOOL']
+            get_remoted_path.remoted_tool_path = os.environ['CFRDTOOL']
         else:
-            REMOTEDTOOL_PATH = "remotedtool"
-    return REMOTEDTOOL_PATH
+            get_remoted_path.remoted_tool_path = "remotedtool"
+    return get_remoted_path.remoted_tool_path
 
 def stop_remoted() -> None:
     bin = get_remoted_path()
@@ -1343,7 +1370,7 @@ async def list_remotes() -> None:
     resume_remoted()
 
 
-async def get_core_device_tunnel_service_from_ipv6(
+def get_core_device_tunnel_service_from_ipv6(
     ipv6: str,
 ) -> [ CoreDeviceTunnelService, str ]:
     stop_remoted()

@@ -1,28 +1,19 @@
-from datetime import (
-    datetime,
-    timedelta,
-)
-
 from asn1crypto import (
     x509,
-)
-#from oscrypto import (
-#    generate_pair,
-#)
-from oscrypto.asymmetric import (
-    PublicKey,
-    PrivateKey,
-    load_certificate,
-    generate_pair,
-    dump_private_key,
-    load_public_key,
-)
-from oscrypto.keys import (
-    parse_public,
 )
 from certbuilder import (
     CertificateBuilder,
     pem_armor_certificate,
+)
+from datetime import (
+    datetime,
+    timedelta,
+)
+from oscrypto.asymmetric import (
+    PrivateKey,
+    generate_pair,
+    dump_private_key,
+    load_public_key,
 )
 from typing import (
     Optional,
