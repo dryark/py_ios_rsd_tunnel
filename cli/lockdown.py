@@ -1,20 +1,16 @@
 # Copyright (c) 2024 Dry Ark LLC
-import asyncio
-from .remote import tunnel_task
-from ..remote.tunnel_service import CoreDeviceTunnelProxy
-from ..lockdown import create_using_usbmux
+from .remote import run_tunnel
+from ..lockdown import lockdown_via_usbmux
+from ..remote.tunnel_service import CoreTunnelProxy
 
 def lockdown_tunnel(
     udid: str
 ) -> None:
-    service_provider = create_using_usbmux(serial=udid)
-    service = CoreDeviceTunnelProxy(service_provider)
+    service_provider = lockdown_via_usbmux( serial = udid )
+    service = CoreTunnelProxy( service_provider )
     
-    #asyncio.run(
-    tunnel_task(
+    run_tunnel(
         service,
         secrets=None,
         protocol='tcp'
     )
-    #)
-    

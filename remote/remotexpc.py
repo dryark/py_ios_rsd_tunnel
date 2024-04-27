@@ -11,15 +11,6 @@ from hyperframe.frame import (
     SettingsFrame,
     WindowUpdateFrame,
 )
-
-from ..exceptions import StreamClosedError
-from .xpc_message import (
-    XpcFlags,
-    XpcWrapper,
-    create_xpc_wrapper,
-    decode_xpc_object,
-)
-
 from socket import create_connection
 from typing import (
     Generator,
@@ -28,6 +19,13 @@ from typing import (
     Tuple,
 )
 
+from ..exceptions import *
+from .xpc_message import (
+    XpcFlags,
+    XpcWrapper,
+    create_xpc_wrapper,
+    decode_xpc_object,
+)
 
 # Extracted by sniffing `remoted` traffic via Wireshark
 DEFAULT_SETTINGS_MAX_CONCURRENT_STREAMS = 100

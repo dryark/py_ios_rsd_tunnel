@@ -1,3 +1,4 @@
+# Copyright (c) 2024 Dry Ark LLC
 from asn1crypto import (
     x509,
 )
@@ -26,10 +27,6 @@ def make_cert(
     common_name=None
 ) -> x509.Certificate:
     source = {
-        #'country_name': 'US',
-        #'state_or_province_name': 'DE',
-        #'locality_name': '?',
-        #'organization_name': 'ControlFloor',
         'common_name': 'Device',
     }
     

@@ -8,22 +8,13 @@ from contextlib import suppress
 from pathlib import Path
 from . import usbmux
 from .home_folder import get_home_folder
-from .exceptions import (
-    MuxException,
-    NotPairedError,
-)
+from .exceptions import *
 from .usbmux import PlistMuxConnection
 from typing import (
     Generator,
     Mapping,
     Optional,
 )
-
-
-PAIR_RECORDS_PATH = {
-    'darwin': Path('/var/db/lockdown/'),# What's the point of this? It can't be accessed.
-    'linux': Path('/var/lib/lockdown/'),
-}
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +23,7 @@ def generate_host_id(hostname: str = None) -> str:
     host_id = uuid.uuid3(uuid.NAMESPACE_DNS, hostname)
     return str(host_id).upper()
 
-def get_local_pairing_record(
+def get_local_pair_record(
     identifier: str,
     local_pairing_path: Path
 ) -> Optional[Mapping]:
@@ -43,18 +34,13 @@ def get_local_pairing_record(
         logger.debug(f'No pairing found for {identifier} in {local_pairing_path}')
         return None
     
-    return plistlib.loads(path.read_bytes())
+    return plistlib.loads( path.read_bytes() )
 
-def get_preferred_pair_record(
+def get_pair_record(
     identifier: str,
-    pairing_records_cache_folder: Path,
+    pair_record_cache_folder: Path,
     usbmux_address: Optional[str] = None,
-) -> Mapping:
-    """
-    look for an existing pair record to connected device by following order:
-    - usbmuxd
-    """
-
+) -> Optional[Mapping]:
     # usbmuxd
     with suppress(NotPairedError, MuxException):
         with usbmux.create_mux(usbmux_address=usbmux_address) as mux:
@@ -63,21 +49,22 @@ def get_preferred_pair_record(
                 if pair_record is not None:
                     return pair_record
 
+    # TODO on Linux use /var/db/lockdown
+
     # local storage
-    return get_local_pairing_record(identifier, pairing_records_cache_folder)
+    return get_local_pair_record( identifier, pair_record_cache_folder )
 
-    #raise Exception(f'Failed to get pairing from usbmuxd')
 
-def create_pairing_records_cache_folder(pairing_records_cache_folder: Path = None) -> Path:
-    if pairing_records_cache_folder is None:
-        pairing_records_cache_folder = get_home_folder()
+def create_pair_record_cache_folder(pair_record_cache_folder: Path = None) -> Path:
+    if pair_record_cache_folder is None:
+        pair_record_cache_folder = get_home_folder()
     else:
-        pairing_records_cache_folder.mkdir(parents=True, exist_ok=True)
+        pair_record_cache_folder.mkdir(parents=True, exist_ok=True)
     
-    return pairing_records_cache_folder
+    return pair_record_cache_folder
 
 
-def get_remote_pairing_record_filename(identifier: str) -> str:
+def get_remote_pair_record_filename(identifier: str) -> str:
     return f'remote_{identifier}'
 
 

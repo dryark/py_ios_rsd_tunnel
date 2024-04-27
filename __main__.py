@@ -9,24 +9,7 @@ from .cli.remote import (
 from .cli.lockdown import (
     lockdown_tunnel,
 )
-from .exceptions import __all__
-from .exceptions import (
-    NotPairedError,
-    PasswordRequiredError,
-    PairingDialogResponsePendingError,
-    ConnectionTerminatedError,
-    NoDeviceConnectedError,
-    UserDeniedPairingError,
-    InvalidHostIDError,
-    GetProhibitedError,
-    SetProhibitedError,
-    MissingValueError,
-    ConnectionFailedToUsbmuxdError,
-    InternalError,
-    InvalidServiceError,
-    AccessDeniedError,
-    DeviceNotFoundError,
-)
+from .exceptions import *
 
 logging.getLogger('quic').disabled = True
 logging.getLogger('asyncio').disabled = True
@@ -60,30 +43,18 @@ def main() -> None:
         else:
             parser.print_help()
     
-    except NoDeviceConnectedError:
-        logger.error('Device is not connected')
-    #except ConnectionAbortedError:
-    #    logger.error('Device was disconnected')
-    except NotPairedError:
-        logger.error('Device is not paired')
-    except UserDeniedPairingError:
-        logger.error('User refused trust prompt')
-    except PairingDialogResponsePendingError:
-        logger.error('Waiting for user trust approval')
-    except SetProhibitedError:
-        logger.error('lockdownd denied the access')
-    except MissingValueError:
-        logger.error('No such value')
-    except ConnectionFailedToUsbmuxdError:
-        logger.error('Failed to connect to /var/run/usbmuxd')
-    except InternalError:
-        logger.error('Internal Error')
-    except InvalidServiceError:
-        logger.error('Failed to start service')
-    except PasswordRequiredError:
-        logger.error('Device is password protected. Please unlock')
-    except AccessDeniedError:
-        logger.error('This command requires root privileges.')
+    except NoDeviceConnectedError:            logger.error('Device is not connected')
+    #except ConnectionAbortedError:            logger.error('Device was disconnected')
+    except NotPairedError:                    logger.error('Device is not paired')
+    except UserDeniedPairingError:            logger.error('User refused trust prompt')
+    except PairingDialogResponsePendingError: logger.error('Waiting for user trust approval')
+    except SetProhibitedError:                logger.error('lockdownd denied the access')
+    except MissingValueError:                 logger.error('No such value')
+    except ConnectionFailedToUsbmuxdError:    logger.error('Failed to connect to /var/run/usbmuxd')
+    except InternalError:                     logger.error('Internal Error')
+    except InvalidServiceError:               logger.error('Failed to start service')
+    except PasswordRequiredError:             logger.error('Device is password protected. Please unlock')
+    except AccessDeniedError:                 logger.error('This command requires root privileges.')
     except BrokenPipeError:
         logger.error('Broken pipe')
         #traceback.print_exc()

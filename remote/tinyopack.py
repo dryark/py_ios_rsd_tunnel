@@ -4,8 +4,6 @@
 
 # This is only here due to a single usage in tunnel_service.py :facepalm:
 
-from enum import Enum, auto
-import copy
 from construct import (
     Adapter,
     Struct,
@@ -28,6 +26,7 @@ from construct import (
     Float64l,
     Array,
 )
+from enum import Enum, auto
 from typing import Mapping, Tuple
 
 class TerminatorObject: pass
@@ -149,7 +148,6 @@ DictionaryLengthedOPack = DictionaryAdapter(
         )
     )
 )
-
 
 TinyOPack = OPackObjectAdapter(Struct(
     'type' / Int8ub,

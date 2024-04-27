@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Dry Ark LLC
 import logging
 
-from .remote_service_discovery import RemoteServiceDiscoveryService
+from .remote_service_discovery import RemoteServiceDiscovery
 from .remotexpc import RemoteXPCConnection
 from typing import Optional
 
@@ -9,7 +9,7 @@ from typing import Optional
 class RemoteService:
     def __init__(
         self,
-        rsd: RemoteServiceDiscoveryService,
+        rsd: RemoteServiceDiscovery,
         service_name: str
     ):
         self.service_name = service_name

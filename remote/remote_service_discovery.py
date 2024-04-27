@@ -5,17 +5,15 @@ import logging
 from dataclasses import dataclass
 
 from ..home_folder import get_home_folder
-from ..exceptions import (
-    InvalidServiceError,
-)
+from ..exceptions import *
 from ..lockdown import (
     LockdownClient,
-    create_using_remote,
+    lockdown_via_remote,
 )
 from ..lockdown_service_provider import LockdownServiceProvider
 from ..pair_records import (
-    get_local_pairing_record,
-    get_remote_pairing_record_filename,
+    get_local_pair_record,
+    get_remote_pair_record_filename,
 )
 from .remotexpc import RemoteXPCConnection
 from ..service_connection import ServiceConnection
@@ -40,7 +38,7 @@ RSD_PORT = 58783
 
 logger = logging.getLogger(__name__)
 
-class RemoteServiceDiscoveryService(LockdownServiceProvider):
+class RemoteServiceDiscovery(LockdownServiceProvider):
     def __init__(
         self, address: Tuple[str, int], name: Optional[str] = None
     ) -> None:
@@ -73,11 +71,11 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
         self.product_type = self.peer_info['Properties']['ProductType']
         
         try:
-            self.lockdown = create_using_remote(
+            self.lockdown = lockdown_via_remote(
                 self.start_lockdown_service('com.apple.mobile.lockdown.remote.trusted')
             )
         except InvalidServiceError:
-            self.lockdown = create_using_remote(
+            self.lockdown = lockdown_via_remote(
                 self.start_lockdown_service('com.apple.mobile.lockdown.remote.untrusted')
             )
         
@@ -94,7 +92,7 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
         self,
         name: str
     ) -> ServiceConnection:
-        return ServiceConnection.create_using_tcp(
+        return ServiceConnection.init_with_tcp(
             self.service.address[0],
             self.get_service_port(name)
         )
@@ -112,12 +110,12 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
         }
         
         if include_escrow_bag:
-            pairing_record = get_local_pairing_record(
-                get_remote_pairing_record_filename(self.udid),
+            pair_record = get_local_pair_record(
+                get_remote_pair_record_filename(self.udid),
                 get_home_folder()
             )
             checkin['EscrowBag'] = base64.b64decode(
-                pairing_record['remote_unlock_host_key']
+                pair_record['remote_unlock_host_key']
             )
         
         response = service.send_recv_plist(checkin)
@@ -176,7 +174,7 @@ class RemoteServiceDiscoveryService(LockdownServiceProvider):
         if self.lockdown is not None:
             self.lockdown.close()
 
-    def __enter__(self) -> 'RemoteServiceDiscoveryService':
+    def __enter__(self) -> 'RemoteServiceDiscovery':
         self.connect()
         return self
 

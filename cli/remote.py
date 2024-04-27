@@ -2,21 +2,29 @@
 import asyncio
 import logging
 import os
-import signal
 import sys
 
-from ..remote.tunnel_service import (
-    start_tunnel,
-    get_core_device_tunnel_service_from_ipv6,
-    list_remotes,
+from ..remote.remoted_tool import stop_remoted, resume_remoted
+from ..remote.tunnel_helpers import (
+    core_tunnel_service_from_ipv6,
     remote_pair,
+    start_tunnel,
 )
+#from ..remote.tunnel_service import (
+#    
+#    
+#)
+from ..remote.remotexpc import RemoteXPCConnection
 from typing import (
     Optional,
     TextIO,
 )
 
-MAX_IDLE_TIMEOUT = 30.0
+# Free solution. DIY
+#from ..mdns import get_remoted_interfaces
+
+# Proprietary solution
+from cf_mdns import get_remoted_interfaces
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +51,7 @@ async def read_inputo():
         return 'stop'
 
 async def stop_task():
-    loop = asyncio.get_running_loop()
+    #loop = asyncio.get_running_loop()
     inp = 'x'
     while inp != 'stop':
         #user_input = await loop.run_in_executor(None, input, "Type 'stop' to exit: ")
@@ -69,10 +77,10 @@ def stop_loop(loop, task):
     task.cancel()  # Cancel the specific background task
     loop.stop()    # Stop the loop
 
-def tunnel_task(
+def run_tunnel(
     service,
     secrets: Optional[TextIO] = None,
-    max_idle_timeout: float = MAX_IDLE_TIMEOUT,
+    max_idle_timeout: float = 30.0,
     protocol: str = 'quic'
 ) -> None:
     loop = asyncio.get_event_loop()
@@ -107,26 +115,15 @@ def tunnel_task(
     
     logger.info('tunnel was closed')
 
-
-def start_tunnel_task_from_ipv6(
-    ipv6: str,
-) -> None:
-    tunnel_service, udid = get_core_device_tunnel_service_from_ipv6( ipv6 = ipv6 )
-    print(f'device udid:{udid}')
-    tunnel_task(
-        tunnel_service,
-        protocol='quic'
-    )
-
 def remote_tunnel(
     ipv6: str,
 ) -> None:
-    #asyncio.run(
-        start_tunnel_task_from_ipv6(
-            ipv6=ipv6,
-        )#,
-        #debug=True,
-    #)
+    tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
+    print(f'device udid:{udid}')
+    run_tunnel(
+        tunnel_service,
+        protocol='quic'
+    )
 
 def cli_pair(
     ipv6: str,
@@ -136,7 +133,25 @@ def cli_pair(
     )
 
 def cli_list() -> None:
-    asyncio.run(
-        list_remotes()
-    )
+    list_remotes()
 
+RSD_PORT = 58783
+
+def list_remotes() -> None:
+    interfaces = get_remoted_interfaces( ios17only = False )
+    #print(f'interfaces {interfaces}')
+    stop_remoted()
+    for iface_info in interfaces:
+        interface = iface_info['interface']
+        ipv6 = iface_info['ipv6']
+        print( f'{{\n  "interface": "{interface}",' )
+        print( f'  "ip":"{ipv6}",' )
+        service = RemoteXPCConnection((f'{ipv6}%{interface}', RSD_PORT))
+        service.connect()
+        info = service.receive_response()
+        udid = info['Properties']['UniqueDeviceID']
+        print(f'  "udid":"{udid}",')
+        ios17 = iface_info['hasRemotePairing']
+        print(f'  "ios17":{ios17}\n}}')
+        service.close()
+    resume_remoted()

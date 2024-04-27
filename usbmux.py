@@ -4,9 +4,7 @@ import plistlib
 import socket
 import time
 
-from .exceptions import (
-    NotPairedError,
-)
+from .exceptions import *
 
 from construct import (
     Const,
@@ -29,9 +27,6 @@ from typing import (
     Mapping,
     Optional,
 )
-
-from .exceptions import __all__
-
 
 usbmuxd_version = Enum(
     Int32ul,
@@ -241,23 +236,21 @@ class MuxConnection:
 
         self.devices = []
 
+    # initiate a "Connect" request to target port
     @abc.abstractmethod
     def _connect(
         self,
         device_id: int,
         port: int
     ):
-        """ initiate a "Connect" request to target port """
         pass
 
+    # request an update to current device list
     @abc.abstractmethod
     def get_device_list(
         self,
         timeout: float = None
     ):
-        """
-        request an update to current device list
-        """
         pass
 
     def connect(
@@ -434,12 +427,12 @@ class PlistMuxConnection(BinaryMuxConnection):
 
     def get_pair_record(
         self,
-        serial: str
+        udid: str
     ) -> Mapping:
-        # serials are saved inside usbmuxd without '-'
+        # udids are saved inside usbmuxd without '-'
         self._send({
             'MessageType': 'ReadPairRecord',
-            'PairRecordID': serial,
+            'PairRecordID': udid,
         })
         response = self._receive(self._tag - 1)
         pair_record = response.get('PairRecordData')
@@ -560,25 +553,21 @@ def select_device(
     connection_type: str = None,
     usbmux_address: Optional[str] = None
 ) -> Optional[MuxDevice]:
-    """
-    select a UsbMux device according to given arguments.
-    if more than one device could be selected, always prefer the usb one.
-    """
     tmp = None
     for device in list_devices(usbmux_address=usbmux_address):
+        # Skip non-matching connection_type
         if connection_type is not None and device.connection_type != connection_type:
-            # if a specific connection_type was desired and not of this one then skip
             continue
 
+        # Skip non-matching udid
         if udid is not None and not device.matches_udid(udid):
-            # if a specific udid was desired and not of this one then skip
             continue
 
         # save best result as a temporary
         tmp = device
 
+        # always use usb
         if device.is_usb:
-            # always prefer usb connection
             return device
 
     return tmp

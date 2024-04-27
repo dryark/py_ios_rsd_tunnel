@@ -7,11 +7,7 @@ import ssl
 import struct
 import time
 
-from .exceptions import (
-    ConnectionFailedError,
-    ConnectionTerminatedError,
-    NoDeviceConnectedError,
-)
+from .exceptions import *
 from .usbmux import select_device
 from .utils import set_keepalive
 from typing import (
@@ -62,14 +58,15 @@ class ServiceConnection:
         self.socket = sock
         self._offset = 0
 
-        # usbmux connections contain additional information associated with the current connection
+        # usbmux connections contain info about the connection
         self.mux_device = mux_device
 
-        self.reader = None  # type: Optional[asyncio.StreamReader]
-        self.writer = None  # type: Optional[asyncio.StreamWriter]
+        self.reader:Optional[asyncio.StreamReader] = None
+        self.writer:Optional[asyncio.StreamWriter] = None
 
-    @staticmethod
-    def create_using_tcp(
+    @classmethod
+    def init_with_tcp(
+        cls,
         hostname: str,
         port: int,
         keep_alive: bool = True,
@@ -77,10 +74,11 @@ class ServiceConnection:
         sock = socket.create_connection((hostname, port))
         if keep_alive:
             set_keepalive(sock)
-        return ServiceConnection(sock)
+        return cls(sock)
 
-    @staticmethod
-    def create_using_usbmux(
+    @classmethod
+    def init_with_usbmux(
+        cls,
         udid: Optional[str],
         port: int,
         connection_type: str = None,
@@ -98,7 +96,7 @@ class ServiceConnection:
             raise NoDeviceConnectedError()
         
         sock = target_device.connect(port, usbmux_address=usbmux_address)
-        return ServiceConnection(sock, mux_device=target_device)
+        return cls(sock, mux_device=target_device)
 
     def close(self) -> None:
         self.socket.close()

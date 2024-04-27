@@ -48,9 +48,6 @@ class MissingValueError(LockdownError):
 
 __all__ = [
     name for name, cls in locals().items() if isinstance(cls, type) and (
-        issubclass(cls, Exception) or
-        issubclass(cls, MuxException) or
-        issubclass(cls, LockdownError) or
-        issubclass(cls, PairingError)
+        issubclass(cls, Exception)
     )
 ]
