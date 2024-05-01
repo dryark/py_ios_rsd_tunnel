@@ -24,27 +24,17 @@ class InvalidServiceError(LockdownError):    pass
 class PasscodeRequiredError(LockdownError):  pass
 class InvalidConnectionError(LockdownError): pass
 class AccessDeniedError(Exception):          pass
+class StreamClosedError(ConnectionTerminatedError): pass # Sending a message to a closed stream
+class InternalError(Exception):              pass # Internal Apple error
+class MissingValueError(LockdownError):      pass # Query of a non-existent domain/key
 
 class DeviceNotFoundError(Exception):
     def __init__(self, udid: str):
         super().__init__()
         self.udid = udid
 
-class StreamClosedError(ConnectionTerminatedError):
-    """ Raise when trying to send a message on a closed stream. """
-    pass
-
-class InternalError(Exception):
-    """ Some internal Apple error """
-    pass
-
 class PairingDialogResponsePendingError(PairingError):
-    """ User hasn't yet confirmed the device is trusted """
-    pass
-
-class MissingValueError(LockdownError):
-    """ raised when attempting to query non-existent domain/key """
-    pass
+    pass # User hasn't yet confirmed pairing
 
 __all__ = [
     name for name, cls in locals().items() if isinstance(cls, type) and (

@@ -10,21 +10,17 @@ from ..remote.tunnel_helpers import (
     remote_pair,
     start_tunnel,
 )
-#from ..remote.tunnel_service import (
-#    
-#    
-#)
 from ..remote.remotexpc import RemoteXPCConnection
 from typing import (
     Optional,
     TextIO,
 )
 
-# Free solution. DIY
-#from ..mdns import get_remoted_interfaces
-
-# Proprietary solution
-from cf_mdns import get_remoted_interfaces
+try:
+    # Proprietary solution
+    from cf_mdns import get_remoted_interfaces
+except ImportError:
+    from ..mdns import get_remoted_interfaces
 
 logger = logging.getLogger(__name__)
 

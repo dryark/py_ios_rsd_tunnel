@@ -27,13 +27,7 @@ from .xpc_message import (
     decode_xpc_object,
 )
 
-# Extracted by sniffing `remoted` traffic via Wireshark
-DEFAULT_SETTINGS_MAX_CONCURRENT_STREAMS = 100
-DEFAULT_SETTINGS_INITIAL_WINDOW_SIZE = 1048576
-DEFAULT_WIN_SIZE_INCR = 983041
-
 FRAME_HEADER_SIZE = 9
-HTTP2_MAGIC = b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n'
 ROOT_CHANNEL = 1
 REPLY_CHANNEL = 3
 
@@ -136,14 +130,16 @@ class RemoteXPCConnection:
         return self.receive_response()
 
     def _do_handshake(self) -> None:
-        self.sock.sendall(HTTP2_MAGIC)
+        self.sock.sendall(b'PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n')
+
+        # Magic values matched to what remoted does
 
         # send h2 headers
         self._send_frame(
             SettingsFrame(
                 settings={
-                    SettingsFrame.MAX_CONCURRENT_STREAMS: DEFAULT_SETTINGS_MAX_CONCURRENT_STREAMS,
-                    SettingsFrame.INITIAL_WINDOW_SIZE: DEFAULT_SETTINGS_INITIAL_WINDOW_SIZE,
+                    SettingsFrame.MAX_CONCURRENT_STREAMS: 100,
+                    SettingsFrame.INITIAL_WINDOW_SIZE: 1048576,
                 }
             )
         )
@@ -151,7 +147,7 @@ class RemoteXPCConnection:
         self._send_frame(
             WindowUpdateFrame(
                 stream_id=0,
-                window_increment=DEFAULT_WIN_SIZE_INCR
+                window_increment=983041
             )
         )
         

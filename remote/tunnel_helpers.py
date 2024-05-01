@@ -1,3 +1,4 @@
+# Copyright (c) 2024 Dry Ark LLC
 from contextlib import (
     asynccontextmanager,
 )
@@ -76,7 +77,6 @@ async def start_tunnel(
     protocol: str = 'quic'
 ) -> AsyncGenerator[TunnelResult, None]:
     if isinstance(tunnel_service, CoreTunnelService):
-        #logging.info('starting tunnel - CoreTunnelService')
         async with start_core_tunnel(
             tunnel_service,
             secrets=secrets,
@@ -86,7 +86,6 @@ async def start_tunnel(
         ) as service:
             yield service
     elif isinstance(tunnel_service, RemoteTunnelService):
-        #logging.info('starting tunnel - RemoteTunnelService')
         async with start_remote_tunnel(
             tunnel_service,
             secrets=secrets,
@@ -96,8 +95,6 @@ async def start_tunnel(
         ) as service:
             yield service
     elif isinstance(tunnel_service, CoreTunnelProxy):
-        #logging.info('starting tunnel - CoreTunnelProxy')
-        
         if protocol != 'tcp':
             raise ValueError('CoreTunnelProxy protocol can only be TCP')
         

@@ -40,7 +40,9 @@ logger = logging.getLogger(__name__)
 
 class RemoteServiceDiscovery(LockdownServiceProvider):
     def __init__(
-        self, address: Tuple[str, int], name: Optional[str] = None
+        self,
+        address: Tuple[str, int],
+        name: Optional[str] = None,
     ) -> None:
         super().__init__()
         self.name = name
@@ -111,8 +113,7 @@ class RemoteServiceDiscovery(LockdownServiceProvider):
         
         if include_escrow_bag:
             pair_record = get_local_pair_record(
-                get_remote_pair_record_filename(self.udid),
-                get_home_folder()
+                get_remote_pair_record_filename(self.udid)
             )
             checkin['EscrowBag'] = base64.b64decode(
                 pair_record['remote_unlock_host_key']

@@ -102,11 +102,6 @@ from ..utils import (
     set_keepalive,
 )
 
-# Free solution. DIY
-#from ..external_utun import ExternalUtun
-
-# Proprietary solution
-
 PairConsentResult = namedtuple('PairConsentResult', 'public_key salt')
 
 RPPairingPacket = Struct(
@@ -208,7 +203,6 @@ class TunnelService(StartTcpTunnel):
         self.identifier = generate_host_id()
         self.srp_context = None
         self.session_key: bytes = None
-        #self.signature = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     @abstractmethod

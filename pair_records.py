@@ -20,13 +20,15 @@ logger = logging.getLogger(__name__)
 
 def generate_host_id(hostname: str = None) -> str:
     hostname = platform.node() if hostname is None else hostname
-    host_id = uuid.uuid3(uuid.NAMESPACE_DNS, hostname)
-    return str(host_id).upper()
+    host_id = uuid.uuid3( uuid.NAMESPACE_DNS, hostname )
+    return str( host_id ).upper()
 
 def get_local_pair_record(
     identifier: str,
-    local_pairing_path: Path
+    local_pairing_path: Optional[Path] = None
 ) -> Optional[Mapping]:
+    if local_pairing_path is None:
+        local_pairing_path = get_home_folder()
     logger.debug('Looking for local(~) pairing record')
     path = local_pairing_path / f'{identifier}.plist'
     

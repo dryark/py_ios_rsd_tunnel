@@ -1,3 +1,4 @@
+# Copyright (c) 2024 Dry Ark LLC
 import asyncio
 import json
 import logging
@@ -6,7 +7,12 @@ import sys
 
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, StreamReader, StreamWriter
-from cf_external_utun import ExternalUtun
+
+try:
+    # Proprietary solution
+    from cf_external_utun import ExternalUtun
+except ImportError:
+    from ..external_utun import ExternalUtun
 
 from construct import (
     Const,
@@ -45,13 +51,10 @@ if sys.platform == 'darwin':
 else:
     UTUN_INET6_HEADER = b'\x00\x00\x86\xdd'
 
-
 CDTunnelPacket = Struct(
     'magic' / Const(b'CDTunnel'),
     'body' / Prefixed(Int16ub, GreedyBytes),
 )
-
-
 
 class RemoteTunnel(ABC):
     def __init__(self):

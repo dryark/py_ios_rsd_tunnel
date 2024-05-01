@@ -1,7 +1,7 @@
 # Copyright (c) 2024 Dry Ark LLC
-from asn1crypto import (
-    x509,
-)
+import zoneinfo
+
+from asn1crypto import x509
 from certbuilder import (
     CertificateBuilder,
     pem_armor_certificate,
@@ -20,7 +20,7 @@ from typing import (
     Optional,
 )
 
-import zoneinfo
+
 def make_cert(
     private_key,
     public_key,
@@ -48,10 +48,14 @@ def make_cert(
     cert = builder.build( private_key )
     return cert
 
-def ca_do_everything(
+def gen_rsa_and_certs(
     device_public_key_pem: str,
     private_key: Optional[PrivateKey] = None
-):
+) -> [
+    str, # pem of signed public key
+    str, # pkcs8 of private key
+    str, # pem of signed device public key
+]:
     if private_key is None:
         public_key, private_key = generate_pair('rsa', bit_size=2048)
     else:
