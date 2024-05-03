@@ -1,4 +1,6 @@
 # Copyright (c) 2012-2023 Mathieu Renard
+# Copyright (c) 2021-2024 matan1008 <matan1008@gmail.com>
+# Copyright (c) 2021-2024 doronz <doron88@gmail.com>
 # Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 import logging

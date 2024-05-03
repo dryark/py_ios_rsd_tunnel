@@ -1,4 +1,5 @@
-# Copyright (C) 2009 Hector Martin "marcan" <hector@marcansoft.com>
+# Copyright (c) 2009 Hector Martin "marcan" <hector@marcansoft.com>
+# Copyright (c) 2021-2024 doronz <doron88@gmail.com>
 # Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 import abc

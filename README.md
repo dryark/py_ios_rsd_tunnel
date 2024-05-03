@@ -1,4 +1,3 @@
-# iosRsdTunnel
 Tool for making iOS 17+ RSD tunnels
 
 It has been written to be as minimal as possible to enable the following:

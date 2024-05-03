@@ -1,3 +1,4 @@
+# Copyright (c) 2021-2024 doronz <doron88@gmail.com>
 # Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License AGPL 3.0
 import dataclasses

@@ -1,8 +1,4 @@
-# Yucky. Eww eww.
-# This module amounts to about 100 lines of C code build terribly resulting in
-#   an absolutely humongous module.
-# It is also named incorrectly. It is a utun. Not a tun. A utun. Not related
-#   at all to Tap.
+# Copyright (c) 2021-2024 doronz <doron88@gmail.com>
 from pytun_pmd3 import TunTapDevice
 
 from typing import (

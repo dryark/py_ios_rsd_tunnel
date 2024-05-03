@@ -1,5 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
-# License AGPL
+# License AGPL 3.0
 from .remotexpc import RemoteXPCConnection
 from cf_mdns import (
     get_remoted_interfaces,
