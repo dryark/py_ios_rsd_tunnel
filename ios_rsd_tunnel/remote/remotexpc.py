@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Dry Ark LLC
+# Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 import socket
 

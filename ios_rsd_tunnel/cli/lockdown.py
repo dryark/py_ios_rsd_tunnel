@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Dry Ark LLC
+# Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 from .remote import run_tunnel
 from ..lockdown import lockdown_via_usbmux

@@ -1,5 +1,7 @@
-# Based off https://github.com/loriwitt/opack
+# Copyright (c) 2023 Lori Witt <loriwittdev@gmail.com>
+# Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License: GPL 3.0
+# Based off https://github.com/loriwitt/opack
 # Adapted from original code to just support dicts,strings,ints,bytes
 
 # This is only here due to a single usage in tunnel_service.py :facepalm:

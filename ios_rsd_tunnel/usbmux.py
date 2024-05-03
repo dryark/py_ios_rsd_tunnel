@@ -1,4 +1,5 @@
-# Copyright (c) 2024 Dry Ark LLC
+# Copyright (C) 2009 Hector Martin "marcan" <hector@marcansoft.com>
+# Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 import abc
 import plistlib

@@ -1,4 +1,5 @@
-# Copyright (c) 2024 Dry Ark LLC
+# Copyright (c) 2012-2023 Mathieu Renard
+# Copyright (c) 2024 Dry Ark LLC <license@dryark.com>
 # License GPL 3.0
 import logging
 import os
@@ -176,12 +177,6 @@ class LockdownClient(ABC, LockdownServiceProvider):
 
         if self.pair_record is None:
             return False
-
-        #if( Version(self.product_version) < Version('7.0')) and (self.device_class != DeviceClass.WATCH):
-        #    try:
-        #        self._request('ValidatePair', {'PairRecord': self.pair_record})
-        #    except PairingError:
-        #        return False
 
         self.host_id = self.pair_record.get('HostID', self.host_id)
         self.system_buid = self.pair_record.get('SystemBUID', self.system_buid)
