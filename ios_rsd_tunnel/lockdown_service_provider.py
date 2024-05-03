@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License GPL 3.0
 from abc import abstractmethod
 from .service_connection import ServiceConnection
 from typing import Optional

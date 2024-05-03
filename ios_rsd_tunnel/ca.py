@@ -1,4 +1,6 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License AGPL
+
 import zoneinfo
 
 from asn1crypto import x509

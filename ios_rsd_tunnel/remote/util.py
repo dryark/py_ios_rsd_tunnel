@@ -1,148 +1,149 @@
+# Copyright (c) 2024 Dry Ark LLC
+# License AGPL
 from .remotexpc import RemoteXPCConnection
-
-import csv
-import os
+from cf_mdns import (
+    get_remoted_interfaces,
+    get_service_info,
+)
+from cf_iface import get_potential_remoted_ifaces
+from .remoted_tool import (
+    stop_remoted,
+    resume_remoted,
+)
+from ..home_folder import get_home_folder
 import fcntl
+import csv
 
-class FileKeyValueStore:
-    def __init__(self, file_path):
-        self.file_path = file_path
-        self.data = {}  # Data dictionary to hold all key-value pairs for each type
-        #self.last_mtime = None
-        self.watch_thread = None
-        self._read_file()  # Read existing data from the file on initialization
-        self.watch_for_changes()
+class CSVKV:
+    def __init__(self, fd):
+        self.fd = fd
+        self.data = {}
+        self.read()
 
-    def read_file(self):
-        #mtime = os.path.getmtime(self.file_path)
-        #if mtime == self.last_mtime:
-        #    return  # File hasn't been modified since last read
-        with open(self.file_path, 'r') as file:
-            fcntl.flock(file, fcntl.LOCK_SH)
-            reader = csv.reader(file)
-            for row in reader:
-                type = row[0]
-                key = row[1]
-                value = row[2]
-                if type not in self.data:
-                    self.data[type] = {}
-                self.data[type][key] = value
-            fcntl.flock(file, fcntl.LOCK_UN)
+    def read(self):
+        reader = csv.reader( self.fd )
+        for row in reader:
+            etype = row[0]
+            key = row[1]
+            val = row[2]
+            #print(f'row {row}')
+            if etype not in self.data:
+                self.data[etype] = { key: val }
+            else:
+                self.data[etype][key] = val
 
-    def write_file(self):
-        with open(self.file_path, 'w') as file:
-            fcntl.flock(file, fcntl.LOCK_EX)
-            writer = csv.writer(file)
-            for type, key_values in self.data.items():
-                for key, value in key_values.items():
-                    writer.writerow([type, key, value])
-            fcntl.flock(file, fcntl.LOCK_UN)
+    def write(self):
+        self.fd.truncate(0)
+        writer = csv.writer(self.fd)
+        for type, key_values in self.data.items():
+            for key, value in key_values.items():
+                writer.writerow([type, key, value])
 
-    def get_values_for_type(self, type):
-        return self.data.get(type, {})
+    def getval( self, etype, key ):
+        if not etype in self.data:
+            return None
+        return self.data[ etype ].get( key )
 
-    def write_values_for_type(self, type, values):
-        self.data[type] = values
-        self.write_file()
-        
-    def watch_for_changes(self):
-        def handle_event(event):
-            if event.name == self.file_path and event.mask & inotify.constants.IN_MODIFY:
-                self.read_file()
-
-        self.watch_thread = inotify.adapters.Inotify()
-        self.watch_thread.add_watch(self.file_path, mask=inotify.constants.IN_MODIFY)
-        self.watch_thread.loop(callback=handle_event)    
+    def setval(self, etype, key, val ):
+        if not etype in self.data:
+            self.data[ etype ] = { key: val }
+            return
+        self.data[ etype ][ key ] = val
     
-    def __getitem__(self, type):
-        #self.read_file()
-        if type not in self.data:
-            self.data[type] = {}
-        return KeyValueProxy(self.data[type], self, type)
+    def delval( self, etype, key ):
+        if not etype in self.data:
+            return
+        del self.data[ etype ][ key ]
     
-    def __setitem__(self, type, values):
-        #self.read_file()
-        self.data[type] = values
-        self.write_file()
-    
-    def __del__(self):
-        if self.watch_thread:
-            self.watch_thread.remove_watch(self.file_path)
-
-class KeyValueProxy:
-    def __init__(self, data, store, type):
-        self.data = data
-        self.store = store
-        self.type = type
-
-    def __getitem__(self, key):
-        return self.data.get(key, None)
-
-    def __setitem__(self, key, value):
-        self.data[key] = value
-        self.store.write_values_for_type(self.type, self.data)
-
-    def __delitem__(self, key):
-        del self.data[key]
-        self.store.write_values_for_type(self.type, self.data)
+    def gettype(self, etype):
+        if not etype in self.data:
+            newdict = {}
+            self.data[ etype ] = newdict
+            return newdict
+        return self.data[ etype ]
 
 def rsd_addr_to_udid( rsdAddr: str ):
-    rsd = RemoteXPCConnection( rsdAddr )
+    rsd = RemoteXPCConnection( ( rsdAddr, 58783 ) )
     rsd.connect()
     info = rsd.receive_response()
     udid = info['Properties']['UniqueDeviceID']
     rsd.close()
     return udid
 
-def udid_to_rsd_addr( udid: str ):
-    kv = FileKeyValueStore( 'data.csv' )
-    
-    stop_remoted()
-    if udid in kv['udid2rsd']:
-        potential_rsd = kv['udid2rsd'][udid]
+def udid_to_rsd_addr(
+    udid: str,
+    skipResume: bool=False,
+) -> str:
+    home_path = get_home_folder()
+    file_path = home_path / 'mapping.csv'
+    with open( file_path, 'a+' ) as fd:
+        fcntl.flock(fd, fcntl.LOCK_SH)
+        fd.seek(0)
+        kv = CSVKV( fd )
+        fd.seek(0)
         
-        check_udid = rsd_addr_to_udid( potential_rsd )
-        if udid == check_udid:
-            resume_remoted()
-            return potential_rsd
-        # didn't match, erase the entry
-        del kv['udid2rsd'][udid]
-        
-    # We didn't already have it mapped
-    # First fetch all potential en# that could work
-    ens = get_potential_remoted_ifaces()
-    
-    # Then check the ones not in the en_to_ipv6 mapping
-    for en in ens:
-        if en not in en_to_rsd:
-            info = get_service_info( en ) # services and ipv6(rsd)
-            
-            if 'remotepairing' not in info['services']:
-                kv['en2rsd'][en] = 'not17'
-                continue
-            # It's new and ios17+; maybe this is the one?
-            kv['en2rsd'][en] = ipv6
-            # figure out the udid using the rsd
-            check_udid = rsd_addr_to_udid( f'{ipv6}%{en}' )
-            kv['udid2rsd'][ check_udid ] = f'{ipv6}%{en}'
+        stop_remoted()
+        #print( f'udid2rsd {kv.gettype("udid2rsd")}' )
+        if udid in kv.gettype('udid2rsd'):
+            potential_rsd = kv.getval( 'udid2rsd', udid )
+            #print( f'step 1 potential_rsd {potential_rsd}' )
+            check_udid = rsd_addr_to_udid( potential_rsd )
             if udid == check_udid:
-                resume_remoted()
-                return f'{ipv6}%{en}'
-    
-    # We still didn't find it. Look through all the remaining en's
-    interfaces = get_remoted_interfaces( ios17only = True, exclude_ens = ens )
-    
-    old_ens = { info['interface']: info['ipv6'] for info in interfaces }
-    for en,ipv6 in old_ens.items():
-        if kv['en2rsd'][en] != ipv6:
-            kv['en2rsd'][ en ] = ipv6
-        check_udid = rsd_addr_to_udid( f'{ipv6}%{en}' )
-        if kv['udid2rsd'][ check_udid ] != f'{ipv6}%{en}':
-            kv['udid2rsd'][ check_udid ] = f'{ipv6}%{en}'
-        if udid == check_udid:
-            resume_remoted()
-            return f'{ipv6}%{en}'
+                if not skipResume:
+                    resume_remoted()
+                kv.write()
+                #print( f'found step1 match' )
+                return potential_rsd
+            # didn't match, erase the entry
+            kv.delval( 'udid2rsd', udid )
             
-    # We didn't find it. Crud.
-    resume_remoted()
-    return 'missing'
+        # We didn't already have it mapped
+        # First fetch all potential en# that could work
+        ens = get_potential_remoted_ifaces()
+        
+        # Then check the ones not in the en_to_ipv6 mapping
+        for en in ens:
+            if en not in kv.gettype('en2rsd'):
+                info = get_service_info( en ) # services and ipv6(rsd)
+                
+                if 'remotepairing' not in info['services']:
+                    kv.setval( 'en2rsd', en, 'not17' )
+                    continue
+                # It's new and ios17+; maybe this is the one?
+                ipv6 = info['ipv6']
+                kv.setval( 'en2rsd', en, ipv6 )
+                # figure out the udid using the rsd
+                ipv6en = f'{ipv6}%{en}'
+                #print( f'ipv6en = {ipv6en}' )
+                check_udid = rsd_addr_to_udid( ipv6en )
+                kv.setval( 'udid2rsd', check_udid, ipv6en )
+                if udid == check_udid:
+                    if not skipResume:
+                        resume_remoted()
+                    kv.write()
+                    #print( f'found step2 match' )
+                    return ipv6en
+        
+        # We still didn't find it. Look through all the remaining en's
+        interfaces = get_remoted_interfaces( ios17only = True, exclude_ens = ens )
+        
+        old_ens = { info['interface']: info['ipv6'] for info in interfaces }
+        for en,ipv6 in old_ens.items():
+            if kv.getval( 'en2rsd', en ) != ipv6:
+                kv.setval( 'en2rsd', en, ipv6 )
+            ipv6en = f'{ipv6}%{en}'
+            check_udid = rsd_addr_to_udid( ipv6en )
+            if kv.getval( 'udid2rsd', check_udid ) != ipv6en:
+                kv.setval( 'udid2rsd', check_udid, ipv6en )
+            if udid == check_udid:
+                if not skipResume:
+                    resume_remoted()
+                kv.write()
+                #print( f'found step3 match' )
+                return ipv6en
+                
+        # We didn't find it. Crud.
+        if not skipResume:
+            resume_remoted()
+        kv.write()
+        return 'missing'

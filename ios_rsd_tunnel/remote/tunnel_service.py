@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License GPL 3.0
 import asyncio
 import base64
 import binascii

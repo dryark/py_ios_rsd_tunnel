@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License AGPL
 from contextlib import (
     asynccontextmanager,
 )
@@ -111,7 +112,7 @@ def core_tunnel_service_from_ipv6(
     stop_remoted()
     rsd = RemoteServiceDiscovery(( ipv6, RSD_PORT ))
     rsd.connect()
-    resume_remoted()
+    #resume_remoted()
     service = CoreTunnelService( rsd )
     service.connect(autopair=True)
     return service, rsd.udid

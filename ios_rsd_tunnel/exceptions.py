@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License GPL 3.0
 class Exception(Exception):                  pass
 class IncorrectModeError(Exception):         pass
 class PairingError(Exception):               pass

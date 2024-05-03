@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License AGPL
 import os
 import subprocess
 

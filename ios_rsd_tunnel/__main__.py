@@ -1,4 +1,6 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License AGPL
+
 import argparse
 import logging
 
@@ -23,7 +25,9 @@ def main() -> None:
     subparsers.add_parser('remote-list', help='List Remote ( ipv6 ) Connectable Devices')
     
     remote_tunnel_cmd = subparsers.add_parser('remote-tunnel', help='Start RSD Tunnel via ipv6 remote')
-    remote_tunnel_cmd.add_argument('-i', '--ipv6', help='ipv6 of device')
+    group = remote_tunnel_cmd.add_mutually_exclusive_group( required=True )
+    group.add_argument('-i', '--ipv6', help='ipv6 of device')
+    group.add_argument('-u', '--udid', help='udid of device')
     
     tunnel_cmd = subparsers.add_parser('tunnel', help='Start RSD Tunnel via lockdown')
     tunnel_cmd.add_argument('-u', '--udid', help='udid of device')
@@ -37,7 +41,10 @@ def main() -> None:
         if cmd == 'remote-list':
             cli_list()
         elif cmd == 'remote-tunnel':
-            remote_tunnel( ipv6 = args.ipv6 )
+            if args.ipv6:
+                remote_tunnel( ipv6 = args.ipv6 )
+            if args.udid:
+                remote_tunnel( udid = args.udid )
         elif cmd == 'tunnel':
             lockdown_tunnel( udid = args.udid )
         else:

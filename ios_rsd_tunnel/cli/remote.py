@@ -1,4 +1,5 @@
 # Copyright (c) 2024 Dry Ark LLC
+# License AGPL
 import asyncio
 import logging
 import os
@@ -10,6 +11,7 @@ from ..remote.tunnel_helpers import (
     remote_pair,
     start_tunnel,
 )
+from ..remote.util import udid_to_rsd_addr
 from ..remote.remotexpc import RemoteXPCConnection
 from typing import (
     Optional,
@@ -112,10 +114,21 @@ def run_tunnel(
     logger.info('tunnel was closed')
 
 def remote_tunnel(
-    ipv6: str,
+    ipv6: Optional[str] = None,
+    udid: Optional[str] = None,
 ) -> None:
-    tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
-    print(f'device udid:{udid}')
+    if ipv6 is None and udid is None:
+        return
+    if ipv6 is not None:
+        tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
+        print(f'device udid:{udid}')
+    else:
+        ipv6 = udid_to_rsd_addr( udid, skipResume=True )
+        if ipv6 is None:
+            print(f'could not find ipv6 of udid:{udid}')
+            return
+        print(f'device ipv6:{ipv6}')
+        tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
     run_tunnel(
         tunnel_service,
         protocol='quic'
