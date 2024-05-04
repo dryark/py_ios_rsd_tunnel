@@ -90,7 +90,7 @@ def run_tunnel(
         protocol,
     ) )
     
-    print(f'{{ "{tunnel_result.address}", "port": {tunnel_result.port} }}')
+    print(f'{{ "ipv6": "{tunnel_result.address}", "port": {tunnel_result.port} }}')
 
     asyncio.set_event_loop(loop)
     
@@ -121,13 +121,13 @@ def remote_tunnel(
         return
     if ipv6 is not None:
         tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
-        print(f'device udid:{udid}')
+        logger.debug('device udid:%s',udid)
     else:
         ipv6 = udid_to_rsd_addr( udid, skipResume=True )
         if ipv6 is None:
             print(f'could not find ipv6 of udid:{udid}')
             return
-        print(f'device ipv6:{ipv6}')
+        logger.debug('device ipv6:%s',ipv6)
         tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
     run_tunnel(
         tunnel_service,
