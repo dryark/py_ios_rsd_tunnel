@@ -677,7 +677,7 @@ class TunnelService(StartTcpTunnel):
         data = self.decode_tlv(PairingDataComponentTLVBuf.parse(response))
 
         if PairingDataComponentType.ERROR in data:
-            print(f'Error verify 2 {data[PairingDataComponentType.ERROR]}')
+            logger.debug("Could not verify remote pairing - maybe expected - %s", f'{data[PairingDataComponentType.ERROR]}')
             self._send_pair_verify_failed()
             return False
 
