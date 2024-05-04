@@ -135,8 +135,14 @@ def remote_tunnel(
     )
 
 def cli_pair(
-    ipv6: str,
+    ipv6: Optional[str] = None,
+    udid: Optional[str] = None,
 ) -> None:
+    if ipv6 is None and udid is None:
+        return
+    if udid is not None and ipv6 is None:
+        ipv6 = udid_to_rsd_addr( udid, skipResume=True )
+        logger.debug('device ipv6:%s',ipv6)
     asyncio.run(
         remote_pair( ipv6 = ipv6 )
     )

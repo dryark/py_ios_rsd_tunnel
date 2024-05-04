@@ -6,6 +6,7 @@ import logging
 
 from .cli.remote import (
     cli_list,
+    cli_pair,
     remote_tunnel,
 )
 from .cli.lockdown import (
@@ -29,6 +30,11 @@ def main() -> None:
     group.add_argument('-i', '--ipv6', help='ipv6 of device')
     group.add_argument('-u', '--udid', help='udid of device')
     
+    remote_pair_cmd = subparsers.add_parser('remote-pair', help='Remote pair a device')
+    group2 = remote_pair_cmd.add_mutually_exclusive_group( required=True )
+    group2.add_argument('-i', '--ipv6', help='ipv6 of device')
+    group2.add_argument('-u', '--udid', help='udid of device')
+    
     tunnel_cmd = subparsers.add_parser('tunnel', help='Start RSD Tunnel via lockdown')
     tunnel_cmd.add_argument('-u', '--udid', help='udid of device')
     
@@ -45,6 +51,11 @@ def main() -> None:
                 remote_tunnel( ipv6 = args.ipv6 )
             if args.udid:
                 remote_tunnel( udid = args.udid )
+        elif cmd == 'remote-pair':
+            if args.ipv6:
+                cli_pair( ipv6 = args.ipv6 )
+            if args.udid:
+                cli_pair( udid = args.udid )
         elif cmd == 'tunnel':
             lockdown_tunnel( udid = args.udid )
         else:
