@@ -91,7 +91,9 @@ def run_tunnel(
     ) )
     
     print(f'{{ "ipv6": "{tunnel_result.address}", "port": {tunnel_result.port} }}')
-
+    
+    #asyncio.run( tunnel_result.client.wait_closed() )
+    
     asyncio.set_event_loop(loop)
     
     running_stop_task = stop_task()

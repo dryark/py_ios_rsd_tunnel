@@ -10,11 +10,7 @@ import sys
 from abc import ABC, abstractmethod
 from asyncio import CancelledError, StreamReader, StreamWriter
 
-try:
-    # Proprietary solution
-    from cf_external_utun import ExternalUtun
-except ImportError:
-    from ..external_utun import ExternalUtun
+from cf_external_utun import ExternalUtun
 
 from construct import (
     Const,
@@ -83,6 +79,7 @@ class RemoteTunnel(ABC):
         label: str = "label", # unique device specific label to use if desired
     ) -> None:
         async def handle_data(data):
+            self._logger.debug("handle_data callback")
             if not data.startswith(UTUN_INET6_HEADER):
                 return
             data = data[len(UTUN_INET6_HEADER):]
@@ -146,6 +143,7 @@ class RemoteQuicTunnel(RemoteTunnel, QuicConnectionProtocol):
     async def keep_alive_task(self) -> None:
         while True:
             await self.ping()
+            self._logger.debug("ping sent to quic")
             await asyncio.sleep(self._quic.configuration.idle_timeout / 2)
 
     async def start_tunnel(
@@ -211,9 +209,16 @@ class RemoteTcpTunnel(RemoteTunnel):
     def wait_closed_task(self):
         return self._writer.wait_closed()
 
-    async def wait_closed(self) -> None:
+    async def wait_writer_closed(self) -> None:
         try:
             await self._writer.wait_closed()
+        except OSError:
+            pass
+    
+    async def wait_closed(self) -> None:
+        try:
+            await self.wait_reader_closed()
+            await self.wait_writer_closed()
         except OSError:
             pass
 
@@ -243,6 +248,12 @@ class RemoteTcpTunnel(RemoteTunnel):
             self.sock_read_task(),
             name=f'sock-read-task-{address}'
         )
+        
+    async def wait_reader_closed(self) -> None:
+        try:
+            await self._sock_read_task
+        except OSError:
+            pass
 
     async def stop_tunnel(self) -> None:
         self._sock_read_task.cancel()
