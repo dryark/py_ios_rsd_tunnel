@@ -67,6 +67,15 @@ async def start_tunnel_collector(a,b,c,d):
         max_idle_timeout=c,
         protocol=d
     ) as result:
+        print(f'{{ "ipv6": "{result.address}", "port": {result.port} }}')
+        
+        try:
+            await stop_task()
+        except KeyboardInterrupt:
+            pass
+        except asyncio.CancelledError:
+            print("Exiting")
+        
         return result
 
 def stop_loop(loop, task):
@@ -90,28 +99,7 @@ def run_tunnel(
         protocol,
     ) )
     
-    print(f'{{ "ipv6": "{tunnel_result.address}", "port": {tunnel_result.port} }}')
-    
-    #asyncio.run( tunnel_result.client.wait_closed() )
-    
-    asyncio.set_event_loop(loop)
-    
-    running_stop_task = stop_task()
-    
-    #print('setting up signal handler')
-    #for sig in [signal.SIGINT, signal.SIGTERM]:
-    #    loop.add_signal_handler(
-    #        sig, stop_loop, loop, running_stop_task
-    #    )
-    
-    try:
-        asyncio.run( running_stop_task )
-    except KeyboardInterrupt:
-        pass
-    except asyncio.CancelledError:
-        print("Exiting")
-    
-    asyncio.run( tunnel_result.client.stop_tunnel() )
+    #asyncio.run( tunnel_result.client.stop_tunnel() )
     
     logger.info('tunnel was closed')
 

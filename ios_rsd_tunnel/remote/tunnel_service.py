@@ -320,8 +320,9 @@ class TunnelService(StartTcpTunnel):
             configuration=configuration,
             create_protocol=RemoteQuicTunnel,
         ) as client:
+        
             self.logger.debug('quic connected')
-            client = cast(RemoteQuicTunnel, client)
+            #client = cast(RemoteQuicTunnel, client)
             await client.wait_connected()
             handshake_response = await client.request_tunnel_establish()
             
@@ -330,22 +331,17 @@ class TunnelService(StartTcpTunnel):
                 handshake_response['clientParameters']['mtu'],
                 label = label,
             )
-            
-            #try:
-            #self.logger.debug("yielding result")
-            ipv6 = handshake_response['serverAddress']
-            port = handshake_response['serverRSDPort']
-            print(f'{{ "ipv6": "{ipv6}", "port": {port} }}')
-            
-            yield TunnelResult(
-                client.tun.name,
-                handshake_response['serverAddress'],
-                handshake_response['serverRSDPort'],
-                'quic',
-                client
-            )
-            #finally:
-            await client.wait_closed()
+
+            try:
+                yield TunnelResult(
+                    client.tun.name,
+                    handshake_response['serverAddress'],
+                    handshake_response['serverRSDPort'],
+                    'quic',
+                    client
+                )
+            finally:
+                await client.stop_tunnel()
 
     @asynccontextmanager
     async def start_tcp_tunnel(
@@ -374,10 +370,6 @@ class TunnelService(StartTcpTunnel):
         )
 
         try:
-            ipv6 = handshake_response['serverAddress']
-            port = handshake_response['serverRSDPort']
-            print(f'{{ "ipv6": "{ipv6}", "port": {port} }}')
-            
             yield TunnelResult(
                 tunnel.tun.name,
                 handshake_response['serverAddress'],
@@ -386,7 +378,7 @@ class TunnelService(StartTcpTunnel):
                 tunnel
             )
         finally:
-            await tunnel.wait_closed()
+            await tunnel.stop_tunnel()
 
     def save_pair_record(self) -> None:
         self.pair_record_path.write_bytes(
@@ -968,10 +960,6 @@ class CoreTunnelProxy(StartTcpTunnel, LockdownService):
         )
         
         try:
-            ipv6 = handshake_response['serverAddress']
-            port = handshake_response['serverRSDPort']
-            print(f'{{ "ipv6": "{ipv6}", "port": {port} }}')
-            
             yield TunnelResult(
                 tunnel.tun.name,
                 handshake_response['serverAddress'],
@@ -980,7 +968,7 @@ class CoreTunnelProxy(StartTcpTunnel, LockdownService):
                 tunnel
             )
         finally:
-            await tunnel.wait_closed()
+            await tunnel.stop_tunnel()
 
     async def aio_close(self) -> None:
         await self._service.aio_close()
