@@ -3,6 +3,7 @@
 
 import argparse
 import logging
+import sys
 
 from .cli.remote import (
     cli_list,
@@ -13,6 +14,7 @@ from .cli.lockdown import (
     lockdown_tunnel,
 )
 from .exceptions import *
+from .remote.remoted_tool import validate_helpers
 
 logging.getLogger('quic').disabled = True
 logging.getLogger('asyncio').disabled = True
@@ -39,8 +41,13 @@ def main() -> None:
     tunnel_cmd.add_argument('-u', '--udid', help='udid of device')
     
     args = parser.parse_args()
-    
+
     cmd = args.command
+
+    # Don't continue if remotedtool or utunuds are going to fail anyway
+    if cmd and not validate_helpers():
+        sys.exit(1)
+
     try:
         logging.basicConfig( level = ( logging.DEBUG if args.verbose else logging.INFO ) )
         
