@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import sys
+import signal
 
 from ..remote.remoted_tool import stop_remoted, resume_remoted
 from ..remote.tunnel_helpers import (
@@ -26,39 +27,20 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-async def read_input():
-    loop = asyncio.get_running_loop()
+async def stop_task():
+    loop = asyncio.get_event_loop()
     reader = asyncio.StreamReader()
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
 
-    # Read one line of input
-    line = await reader.readline()
-    print(f"Received: {line.decode().strip()}")
-    return line.decode().strip()
-    
-async def read_inputo():
-    loop = asyncio.get_running_loop()
-    try:
-        # Read from stdin using os.read() in a separate thread
-        future = loop.run_in_executor(None, os.read, sys.stdin.fileno(), 1024)
-        result = await future
-        return result.decode().strip()
-    except KeyboardInterrupt:
-        print("Ctrl-C detected. Exiting...")
-        return 'stop'
-
-async def stop_task():
-    #loop = asyncio.get_running_loop()
-    inp = 'x'
-    while inp != 'stop':
-        #user_input = await loop.run_in_executor(None, input, "Type 'stop' to exit: ")
-        user_input = await read_input()
-        print(f'input {user_input}')
-        #user_input = await reader.readline()
-        inp = user_input.strip().lower()
-        print(f'input is {inp}')
-    return 1
+    while True:
+        # readline returns b"" on EOF (false).  On any other read, it minimally returns b"\n" (true)
+        user_input = await reader.readline()
+        if not user_input or user_input.decode().lower().strip() == 'stop':
+            # Insurance... send ^C to ourselves for whatever else might handle it?
+            # Uncomment if we're still getting hung processes later
+            # os.kill(os.getpid(), signal.SIGINT)
+            break
 
 async def start_tunnel_collector(a,b,c,d):
     async with start_tunnel(
