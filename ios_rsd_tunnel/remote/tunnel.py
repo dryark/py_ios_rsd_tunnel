@@ -78,13 +78,16 @@ class RemoteTunnel(ABC):
         mtu: int,
         label: str = "label", # unique device specific label to use if desired
     ) -> None:
+        # 'data' is an iPV6 packet prefixed with a datagram-type
         async def handle_data(data):
-            self._logger.debug("handle_data callback")
+            self._logger.debug("handle_data callback: %d bytes received" % (len(data)))
             if not data.startswith(UTUN_INET6_HEADER):
+                self._logger.debug('ignoring non-ipv6 frame received on unix domain socket')
                 return
+
             data = data[len(UTUN_INET6_HEADER):]
             await self.send_packet_to_device(data)
-        
+
         self.tun = ExternalUtun()
         await self.tun.up(
             ipv6 = address,
