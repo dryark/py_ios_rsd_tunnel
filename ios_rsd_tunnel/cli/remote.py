@@ -97,7 +97,7 @@ def remote_tunnel(
     else:
         ipv6 = udid_to_rsd_addr( udid, skipResume=True )
         if ipv6 is None:
-            print(f'could not find ipv6 of udid:{udid}')
+            print(f'Could not find ipv6 of udid:{udid}')
             return
         logger.debug('device ipv6:%s',ipv6)
         tunnel_service, udid = core_tunnel_service_from_ipv6( ipv6 = ipv6 )
@@ -114,6 +114,9 @@ def cli_pair(
         return
     if udid is not None and ipv6 is None:
         ipv6 = udid_to_rsd_addr( udid, skipResume=True )
+        if ipv6 is None:
+            print(f'Could not find ipv6 of udid:{udid}')
+            return
         logger.debug('device ipv6:%s',ipv6)
     asyncio.run(
         remote_pair( ipv6 = ipv6 )

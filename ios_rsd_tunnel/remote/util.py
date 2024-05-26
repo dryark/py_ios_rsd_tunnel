@@ -105,8 +105,7 @@ def udid_to_rsd_addr(
         for en in ens:
             if en not in kv.gettype('en2rsd'):
                 info = get_service_info( en ) # services and ipv6(rsd)
-                
-                if 'remotepairing' not in info['services']:
+                if 'remotepairing' not in info['services'] and 'remotepairing-tunnel' not in info['services']:
                     kv.setval( 'en2rsd', en, 'not17' )
                     continue
                 # It's new and ios17+; maybe this is the one?
@@ -146,4 +145,4 @@ def udid_to_rsd_addr(
         if not skipResume:
             resume_remoted()
         kv.write()
-        return 'missing'
+        return None
